@@ -69,7 +69,7 @@ finance-tracker-app/
 
 ### Backend
 The app uses a Python Flask backend with:
-- Supabase for database
+- MySQL database (via phpMyAdmin)
 - JWT authentication
 - AI service integration
 
@@ -80,7 +80,7 @@ The app uses a Python Flask backend with:
 ### Prerequisites
 - Flutter SDK (>=3.0.0)
 - Python 3.x
-- Supabase account
+- MySQL (with phpMyAdmin)
 
 ### Installation
 
@@ -103,7 +103,7 @@ The app uses a Python Flask backend with:
 
 4. **Configure environment variables**
    - Create a `.env` file in the backend directory
-   - Add your Supabase credentials
+   - Add your MySQL credentials (host, port, user, password, database)
 
 5. **Run the app**
    ```bash
@@ -194,10 +194,9 @@ dependencies:
 ```
 flask
 flask-cors
-supabase
+mysql-connector-python
 python-jose
-cryptography
-openai (optional)
+bcrypt
 ```
 
 ---
@@ -208,11 +207,13 @@ openai (optional)
 The app requires the following permissions:
 - `READ_CONTACTS` - For contact-based features
 
-### Supabase Schema
+### MySQL Schema
 The app uses the following tables:
 - `users` - User accounts
 - `transactions` - Income/Expense records
 - `loans` - Loan tracking (given/borrowed)
+- `loan_contacts` - Person-centric loan contacts
+- `loan_activities` - Activity history for loans
 
 ---
 
@@ -234,6 +235,6 @@ Musfiqul Islam Shaon
 - [Riverpod](https://riverpod.dev) - State management
 - [GoRouter](https://pub.dev/packages/go_router) - Declarative routing
 - [Fl Chart](https://fl_chart.dev) - Beautiful charts
-- [Supabase](https://supabase.com) - Backend-as-a-Service
+- [MySQL](https://www.mysql.com) - Database
 - [Flask](https://flask.palletsprojects.com) - Python web framework
 

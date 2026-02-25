@@ -21,8 +21,8 @@ class Transaction {
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
     return Transaction(
-      id: json['id'] as String,
-      userId: json['user_id'] as String,
+      id: json['id'].toString(), // Convert int to String
+      userId: json['user_id'].toString(), // Convert int to String
       type: json['type'] as String,
       amount: (json['amount'] as num).toDouble(),
       category: json['category'] as String,

@@ -1,5 +1,7 @@
 from flask import Blueprint, jsonify, request
-from services.supabase_service import get_client
+from services.mysql_service import (
+    get_transactions, get_loans, get_loan_contacts, get_loan_contact_details
+)
 from utils.jwt_handler import decode_token
 
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -19,83 +21,52 @@ def get_user_from_token():
 
 def calculate_balance(user_id):
     """Calculate current balance including all loan activities"""
-    supabase = get_client()
-    
     # Get all transactions
-    tx_response = supabase.table('transactions').select('*').eq('user_id', user_id).execute()
-    transactions = tx_response.data
+    transactions = get_transactions(user_id)
     
-    # Get all loan activities from new loan system
-    activities_response = supabase.table('loan_activities').select('*').eq('user_id', user_id).execute()
-    activities = activities_response.data
+    # Get all loan contacts
+    loan_contacts = get_loan_contacts(user_id)
     
-    # Also get old loans for backward compatibility
-    old_loans_response = supabase.table('loans').select('*').eq('user_id', user_id).execute()
-    old_loans = old_loans_response.data
+    # Get old loans for backward compatibility
+    old_loans = get_loans(user_id)
     
     # Calculate totals from transactions
-    total_income = sum(t['amount'] for t in transactions if t['type'] == 'income')
-    total_expenses = sum(t['amount'] for t in transactions if t['type'] == 'expense')
+    total_income = sum(float(t['amount']) for t in transactions if t['type'] == 'income')
+    total_expenses = sum(float(t['amount']) for t in transactions if t['type'] == 'expense')
     
-    # Calculate from new loan activities
-    # Given: money going OUT (decreases balance)
-    # Borrowed: money coming IN (increases balance)
-    # Payment received: money coming IN (increases balance)
-    # Payment made: money going OUT (decreases balance)
+    # Calculate from loan contacts
+    outstanding_given = 0
+    outstanding_borrowed = 0
     
-    total_loan_given = sum(a['amount'] for a in activities if a['activity_type'] == 'given')
-    total_loan_borrowed = sum(a['amount'] for a in activities if a['activity_type'] == 'borrowed')
-    total_payment_received = sum(a['amount'] for a in activities if a['activity_type'] == 'payment_received')
-    total_payment_made = sum(a['amount'] for a in activities if a['activity_type'] == 'payment_made')
+    for contact in loan_contacts:
+        balance = float(contact.get('current_balance', 0))
+        if balance > 0:
+            outstanding_given += balance
+        else:
+            outstanding_borrowed += abs(balance)
     
     # Also include old loans for backward compatibility
     old_loan_given = sum(
-        l['amount'] - (l.get('paid_amount') or 0) 
+        float(l['amount']) - float(l.get('paid_amount', 0)) 
         for l in old_loans 
         if l['type'] == 'given' and not l.get('is_paid', False)
     )
     old_loan_borrowed = sum(
-        l['amount'] - (l.get('paid_amount') or 0) 
+        float(l['amount']) - float(l.get('paid_amount', 0)) 
         for l in old_loans 
         if l['type'] == 'borrowed' and not l.get('is_paid', False)
     )
     
-    # Combine old and new loan data
-    total_given = total_loan_given + old_loan_given
-    total_borrowed = total_loan_borrowed + old_loan_borrowed
-    
-    # Calculate current outstanding from loan contacts
-    # Get latest balance for each contact
-    contacts_response = supabase.table('loan_contacts').select('id').eq('user_id', user_id).execute()
-    contact_ids = [c['id'] for c in contacts_response.data]
-    
-    outstanding_given = 0
-    outstanding_borrowed = 0
-    
-    for contact_id in contact_ids:
-        latest = supabase.table('loan_activities').select('balance_after').eq('contact_id', contact_id).order('created_at', desc=True).limit(1).execute()
-        if latest.data:
-            balance = latest.data[0]['balance_after']
-            if balance > 0:
-                outstanding_given += balance
-            else:
-                outstanding_borrowed += abs(balance)
-    
-    # Add old loans outstanding
     outstanding_given += old_loan_given
     outstanding_borrowed += old_loan_borrowed
     
-    # Total Balance = Income - Expenses - Given + Borrowed + PaymentReceived - PaymentMade
-    total_balance = total_income - total_expenses - total_loan_given + total_loan_borrowed + total_payment_received - total_payment_made - old_loan_given + old_loan_borrowed
+    # Total Balance = Income - Expenses - Outstanding Given + Outstanding Borrowed
+    total_balance = total_income - total_expenses - outstanding_given + outstanding_borrowed
     
     return {
         'total_balance': total_balance,
         'total_income': total_income,
         'total_expenses': total_expenses,
-        'loan_given': total_given,
-        'loan_borrowed': total_borrowed,
-        'payment_received': total_payment_received,
-        'payment_made': total_payment_made,
         'outstanding_given': outstanding_given,
         'outstanding_borrowed': outstanding_borrowed,
     }
@@ -109,72 +80,65 @@ def get_dashboard():
     
     balance_data = calculate_balance(user_id)
     
-    supabase = get_client()
+    # Get all transactions
+    transactions = get_transactions(user_id)
     
-    # Get transactions for monthly data
-    tx_response = supabase.table('transactions').select('*').eq('user_id', user_id).execute()
-    transactions = tx_response.data
-    
-    # Get loan activities for monthly loan data
-    activities_response = supabase.table('loan_activities').select('*').eq('user_id', user_id).execute()
-    loan_activities = activities_response.data
-    
-    # Get loan contacts count
-    contacts_response = supabase.table('loan_contacts').select('id').eq('user_id', user_id).execute()
-    loan_contacts_count = len(contacts_response.data)
+    # Get loan contacts
+    loan_contacts = get_loan_contacts(user_id)
+    loan_contacts_count = len(loan_contacts)
     
     # Monthly data for transactions
     monthly_data = {}
     for t in transactions:
-        month = t['date'][:7]  # YYYY-MM
+        date_str = str(t['date'])
+        month = date_str[:7]  # YYYY-MM
         if month not in monthly_data:
             monthly_data[month] = {'income': 0, 'expense': 0, 'loan_given': 0, 'loan_borrowed': 0}
         if t['type'] == 'income':
-            monthly_data[month]['income'] += t['amount']
+            monthly_data[month]['income'] += float(t['amount'])
         else:
-            monthly_data[month]['expense'] += t['amount']
-    
-    # Monthly data for loan activities
-    for activity in loan_activities:
-        if activity.get('created_at'):
-            month = activity['created_at'][:7]  # YYYY-MM
-            if month not in monthly_data:
-                monthly_data[month] = {'income': 0, 'expense': 0, 'loan_given': 0, 'loan_borrowed': 0}
-            if activity['activity_type'] == 'given':
-                monthly_data[month]['loan_given'] += activity['amount']
-            elif activity['activity_type'] == 'borrowed':
-                monthly_data[month]['loan_borrowed'] += activity['amount']
+            monthly_data[month]['expense'] += float(t['amount'])
     
     # Sort by month and take last 6 months
     sorted_months = sorted(monthly_data.keys())[-6:]
     monthly_list = [{'month': m, **monthly_data[m]} for m in sorted_months]
     
     # Recent transactions (last 10)
-    recent_transactions = sorted(transactions, key=lambda x: x['date'], reverse=True)[:10]
+    sorted_transactions = sorted(transactions, key=lambda x: x['date'], reverse=True)[:10]
+    for t in sorted_transactions:
+        t['amount'] = float(t['amount'])
+        # Convert date fields to string for JSON
+        if t.get('date'):
+            t['date'] = str(t['date'])
+        if t.get('created_at'):
+            t['created_at'] = str(t['created_at'])
     
     # Category-wise expense breakdown
     expense_by_category = {}
     income_by_category = {}
     for t in transactions:
         category = t.get('category', 'Other')
+        amount = float(t['amount'])
         if t['type'] == 'expense':
-            expense_by_category[category] = expense_by_category.get(category, 0) + t['amount']
+            expense_by_category[category] = expense_by_category.get(category, 0) + amount
         else:
-            income_by_category[category] = income_by_category.get(category, 0) + t['amount']
+            income_by_category[category] = income_by_category.get(category, 0) + amount
     
     # Transaction counts
     total_transactions = len(transactions)
-    total_income_count = len([t for t in transactions if t['type'] == 'income'])
-    total_expense_count = len([t for t in transactions if t['type'] == 'expense'])
+    income_transactions = [t for t in transactions if t['type'] == 'income']
+    expense_transactions = [t for t in transactions if t['type'] == 'expense']
+    total_income_count = len(income_transactions)
+    total_expense_count = len(expense_transactions)
     
     # Average transaction values
     avg_income = balance_data['total_income'] / total_income_count if total_income_count > 0 else 0
     avg_expense = balance_data['total_expenses'] / total_expense_count if total_expense_count > 0 else 0
     
-    # Loan activity counts
-    total_loan_activities = len(loan_activities)
-    total_given_count = len([a for a in loan_activities if a['activity_type'] == 'given'])
-    total_borrowed_count = len([a for a in loan_activities if a['activity_type'] == 'borrowed'])
+    # Calculate total loan activities
+    total_loan_activities = sum(c.get('activity_count', 0) for c in loan_contacts)
+    total_given_count = 0
+    total_borrowed_count = 0
     
     return jsonify({
         'total_balance': balance_data['total_balance'],
@@ -182,10 +146,10 @@ def get_dashboard():
         'total_expenses': balance_data['total_expenses'],
         'loan_given': balance_data['outstanding_given'],
         'loan_borrowed': balance_data['outstanding_borrowed'],
-        'total_loan_given': balance_data['loan_given'],
-        'total_loan_borrowed': balance_data['loan_borrowed'],
+        'total_loan_given': balance_data['outstanding_given'],
+        'total_loan_borrowed': balance_data['outstanding_borrowed'],
         'monthly_data': monthly_list,
-        'recent_transactions': recent_transactions,
+        'recent_transactions': sorted_transactions,
         # Additional analytics data
         'expense_by_category': expense_by_category,
         'income_by_category': income_by_category,

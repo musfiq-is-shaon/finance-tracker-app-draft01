@@ -33,8 +33,8 @@ class LoanContact {
 
   factory LoanContact.fromJson(Map<String, dynamic> json) {
     return LoanContact(
-      id: json['id'] as String,
-      userId: json['user_id'] as String,
+      id: json['id'].toString(), // Convert int to String
+      userId: json['user_id'].toString(), // Convert int to String
       name: json['name'] as String,
       phoneNumber: json['phone_number'] as String?,
       email: json['email'] as String?,

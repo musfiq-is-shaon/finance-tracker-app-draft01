@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
-from services.supabase_service import get_client
+import bcrypt
+from services.mysql_service import create_user, get_user_by_email, get_user_by_id, update_user_name
 from utils.jwt_handler import create_token, decode_token
 
 auth_bp = Blueprint('auth', __name__)
@@ -22,17 +23,15 @@ def validate_token():
         return jsonify({'valid': False, 'message': 'Invalid token payload'}), 401
     
     # Get user info from database
-    supabase = get_client()
     try:
-        profile_response = supabase.table('profiles').select('name').eq('id', user_id).execute()
-        user_name = None
-        if profile_response.data and len(profile_response.data) > 0:
-            user_name = profile_response.data[0].get('name')
+        user = get_user_by_id(user_id)
+        if not user:
+            return jsonify({'valid': False, 'message': 'User not found'}), 401
         
         return jsonify({
             'valid': True,
             'user_id': user_id,
-            'name': user_name
+            'name': user.get('name')
         }), 200
     except Exception as e:
         return jsonify({'valid': False, 'message': str(e)}), 401
@@ -50,29 +49,27 @@ def signup():
     if not name:
         return jsonify({'message': 'Name is required'}), 400
     
-    supabase = get_client()
-    
     try:
-        response = supabase.auth.sign_up({
-            "email": email,
-            "password": password
-        })
+        # Check if user already exists
+        existing_user = get_user_by_email(email)
+        if existing_user:
+            return jsonify({'message': 'Email already registered'}), 400
         
-        if response.user:
-            user_id = response.user.id
-            
-            # Update the profile with the user's name
-            supabase.table('profiles').update({'name': name}).eq('id', user_id).execute()
-            
-            token = create_token(user_id, email)
-            return jsonify({
-                'message': 'User created successfully',
-                'token': token,
-                'user_id': user_id,
-                'name': name
-            }), 201
-        else:
-            return jsonify({'message': 'Failed to create user'}), 400
+        # Hash password
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        # Create user
+        user_id = create_user(email, password_hash, name)
+        
+        # Generate token
+        token = create_token(user_id, email)
+        
+        return jsonify({
+            'message': 'User created successfully',
+            'token': token,
+            'user_id': user_id,
+            'name': name
+        }), 201
             
     except Exception as e:
         return jsonify({'message': str(e)}), 400
@@ -86,42 +83,26 @@ def login():
     if not email or not password:
         return jsonify({'message': 'Email and password are required'}), 400
     
-    supabase = get_client()
-    
     try:
-        response = supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": password
-        })
-        
-        if response.user:
-            # Check if email is confirmed
-            if not response.user.email_confirmed_at:
-                return jsonify({
-                    'message': 'Please confirm your email address before logging in. Check your inbox for the confirmation link.'
-                }), 401
-            
-            user_id = response.user.id
-            
-            # Get user's name from profiles table
-            profile_response = supabase.table('profiles').select('name').eq('id', user_id).execute()
-            user_name = None
-            if profile_response.data and len(profile_response.data) > 0:
-                user_name = profile_response.data[0].get('name')
-            
-            token = create_token(user_id, email)
-            return jsonify({
-                'message': 'Login successful',
-                'token': token,
-                'user_id': user_id,
-                'name': user_name
-            }), 200
-        else:
+        # Get user by email
+        user = get_user_by_email(email)
+        if not user:
             return jsonify({'message': 'Invalid credentials'}), 401
+        
+        # Verify password
+        if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+            return jsonify({'message': 'Invalid credentials'}), 401
+        
+        # Generate token
+        token = create_token(user['id'], email)
+        
+        return jsonify({
+            'message': 'Login successful',
+            'token': token,
+            'user_id': user['id'],
+            'name': user.get('name')
+        }), 200
             
     except Exception as e:
-        error_msg = str(e)
-        if 'Email not confirmed' in error_msg:
-            return jsonify({'message': 'Please confirm your email address before logging in. Check your inbox for the confirmation link.'}), 401
-        return jsonify({'message': error_msg}), 401
+        return jsonify({'message': str(e)}), 401
 

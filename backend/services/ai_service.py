@@ -1,11 +1,8 @@
-import random
-from services.supabase_service import get_client
+from services.mysql_service import get_transactions
 
 def analyze_spending_patterns(user_id):
-    supabase = get_client()
-    
-    response = supabase.table('transactions').select('*').eq('user_id', user_id).execute()
-    transactions = response.data
+    # Get transactions from MySQL
+    transactions = get_transactions(user_id)
     
     if not transactions:
         return {
@@ -15,14 +12,14 @@ def analyze_spending_patterns(user_id):
             'advice': "Start tracking your transactions to get personalized financial advice!"
         }
     
-    total_income = sum(t['amount'] for t in transactions if t['type'] == 'income')
-    total_expenses = sum(t['amount'] for t in transactions if t['type'] == 'expense')
+    total_income = sum(float(t['amount']) for t in transactions if t['type'] == 'income')
+    total_expenses = sum(float(t['amount']) for t in transactions if t['type'] == 'expense')
     
     category_spending = {}
     for t in transactions:
         if t['type'] == 'expense':
             cat = t.get('category', 'Other')
-            category_spending[cat] = category_spending.get(cat, 0) + t['amount']
+            category_spending[cat] = category_spending.get(cat, 0) + float(t['amount'])
     
     top_category = max(category_spending, key=category_spending.get) if category_spending else None
     

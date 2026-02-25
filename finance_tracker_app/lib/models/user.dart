@@ -13,7 +13,7 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      id: json['id'] as String,
+      id: json['id'].toString(), // Convert int to String
       email: json['email'] as String,
       name: json['name'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),

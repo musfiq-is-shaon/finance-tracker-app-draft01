@@ -75,9 +75,9 @@ class LoanActivity {
 
   factory LoanActivity.fromJson(Map<String, dynamic> json) {
     return LoanActivity(
-      id: json['id'] as String,
-      userId: json['user_id'] as String,
-      contactId: json['contact_id'] as String,
+      id: json['id'].toString(), // Convert int to String
+      userId: json['user_id'].toString(), // Convert int to String
+      contactId: json['contact_id'].toString(), // Convert int to String
       activityType: LoanActivityTypeExtension.fromString(json['activity_type'] as String),
       amount: (json['amount'] as num).toDouble(),
       balanceAfter: (json['balance_after'] as num).toDouble(),

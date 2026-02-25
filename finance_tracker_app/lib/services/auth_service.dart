@@ -169,7 +169,7 @@ class AuthService {
         if (response.statusCode >= 200 && response.statusCode < 300) {
           if (data['valid'] == true) {
             // Token is valid, update user info from server response
-            final userId = data['user_id'] as String?;
+            final userId = data['user_id']?.toString(); // Convert int to String
             final userName = data['name'] as String?;
             final prefs = await getPrefs();
             
@@ -274,7 +274,7 @@ class AuthService {
     try {
       final response = await ApiService.signup(name, email, password);
       final token = response['token'] as String;
-      final userId = response['user_id'] as String;
+      final userId = response['user_id'].toString(); // Convert int to String
       final userName = response['name'] as String?;
       
       final prefs = await getPrefs();
@@ -302,7 +302,7 @@ class AuthService {
     try {
       final response = await ApiService.login(email, password);
       final token = response['token'] as String;
-      final userId = response['user_id'] as String;
+      final userId = response['user_id'].toString(); // Convert int to String
       final userName = response['name'] as String?;
       
       final prefs = await getPrefs();

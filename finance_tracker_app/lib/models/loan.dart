@@ -29,8 +29,8 @@ class Loan {
 
   factory Loan.fromJson(Map<String, dynamic> json) {
     return Loan(
-      id: json['id'] as String,
-      userId: json['user_id'] as String,
+      id: json['id'].toString(), // Convert int to String
+      userId: json['user_id'].toString(), // Convert int to String
       type: json['type'] as String,
       personName: json['person_name'] as String,
       phoneNumber: json['phone_number'] as String?,
@@ -38,7 +38,7 @@ class Loan {
       paidAmount: json['paid_amount'] != null ? (json['paid_amount'] as num).toDouble() : null,
       description: json['description'] as String?,
       date: DateTime.parse(json['date'] as String),
-      isPaid: json['is_paid'] as bool,
+      isPaid: json['is_paid'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }

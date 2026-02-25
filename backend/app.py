@@ -1,5 +1,7 @@
 from flask import Flask
 from flask_cors import CORS
+from datetime import datetime, date
+import json
 from config import Config
 from routes.auth_routes import auth_bp
 from routes.transaction_routes import transaction_bp
@@ -7,9 +9,28 @@ from routes.loan_routes import loan_bp
 from routes.loan_contacts_routes import loan_contacts_bp
 from routes.dashboard_routes import dashboard_bp
 from routes.ai_routes import ai_bp
+from services.mysql_service import init_database
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
+# Custom JSON encoder to handle datetime and date objects
+class CustomJSONProvider(app.json_provider_class):
+    def default(self, obj):
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()  # Return ISO 8601 format
+        return super().default(obj)
+
+app.json_provider_class = CustomJSONProvider
+app.json = CustomJSONProvider(app)
+
+# Initialize database on startup
+try:
+    init_database()
+    print("Database initialized successfully!")
+except Exception as e:
+    print(f"Warning: Could not initialize database: {e}")
+    print("Make sure MySQL is running and accessible.")
 
 CORS(app, 
      resources={r"/api/*": {"origins": "*"}},

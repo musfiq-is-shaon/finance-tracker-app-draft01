@@ -14,7 +14,7 @@ class Constants {
   // For 'physical' mode only: your computer's local IP address
   // Get it by running: ipconfig getifaddr en0 (on macOS)
   // Or check: System Settings > Network > IP Address
-  static const String physicalDeviceIp = '192.168.0.101';  // <-- CHANGE THIS if using 'physical' mode
+  static const String physicalDeviceIp = '192.168.68.117';  // <-- CHANGE THIS if using 'physical' mode
   
   // Port where your backend is running
   static const int backendPort = 5001;
@@ -38,10 +38,6 @@ class Constants {
         return 'http://10.0.2.2:$backendPort';
     }
   }
-  
-  // Supabase Configuration
-  static const String supabaseUrl = 'https://oeallybeawbthptebwca.supabase.co';
-  static const String supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lYWxseWJlYXdidGhwdGVid2NhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNzk0NDQsImV4cCI6MjA4Njc1NTQ0NH0.Cdws0xQ0odwx-dW-AvGS37jZJMZuvxx5_5BJ0rO-VAQ';
   
   static const List<String> incomeCategories = [
     'Salary',
