@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from services.mysql_service import (
-    get_transactions, get_loans, get_loan_contacts, get_loan_contact_details
+    get_transactions, get_loans, get_loan_contacts, get_loan_contact_details,
+    get_loan_activities
 )
 from utils.jwt_handler import decode_token
 
@@ -87,6 +88,14 @@ def get_dashboard():
     loan_contacts = get_loan_contacts(user_id)
     loan_contacts_count = len(loan_contacts)
     
+    # Get all loan activities for monthly data
+    all_activities = []
+    for contact in loan_contacts:
+        activities = get_loan_activities(contact['id'], user_id)
+        for activity in activities:
+            activity['contact_name'] = contact.get('name', '')
+        all_activities.extend(activities)
+    
     # Monthly data for transactions
     monthly_data = {}
     for t in transactions:
@@ -98,6 +107,27 @@ def get_dashboard():
             monthly_data[month]['income'] += float(t['amount'])
         else:
             monthly_data[month]['expense'] += float(t['amount'])
+    
+    # Add loan activities to monthly data
+    for activity in all_activities:
+        date_str = str(activity.get('activity_date', ''))
+        month = date_str[:7]  # YYYY-MM
+        if month not in monthly_data:
+            monthly_data[month] = {'income': 0, 'expense': 0, 'loan_given': 0, 'loan_borrowed': 0}
+        
+        activity_type = activity.get('activity_type', '')
+        amount = float(activity.get('amount', 0))
+        
+        if activity_type == 'given':
+            monthly_data[month]['loan_given'] += amount
+        elif activity_type == 'borrowed':
+            monthly_data[month]['loan_borrowed'] += amount
+        elif activity_type == 'payment_received':
+            # Payment received reduces outstanding loan given
+            monthly_data[month]['loan_given'] -= amount
+        elif activity_type == 'payment_made':
+            # Payment made reduces outstanding loan borrowed
+            monthly_data[month]['loan_borrowed'] -= amount
     
     # Sort by month and take last 6 months
     sorted_months = sorted(monthly_data.keys())[-6:]
@@ -135,10 +165,10 @@ def get_dashboard():
     avg_income = balance_data['total_income'] / total_income_count if total_income_count > 0 else 0
     avg_expense = balance_data['total_expenses'] / total_expense_count if total_expense_count > 0 else 0
     
-    # Calculate total loan activities
+    # Calculate total loan activities and counts
     total_loan_activities = sum(c.get('activity_count', 0) for c in loan_contacts)
-    total_given_count = 0
-    total_borrowed_count = 0
+    total_given_count = sum(1 for a in all_activities if a.get('activity_type') == 'given')
+    total_borrowed_count = sum(1 for a in all_activities if a.get('activity_type') == 'borrowed')
     
     return jsonify({
         'total_balance': balance_data['total_balance'],
